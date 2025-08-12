@@ -52,7 +52,7 @@ pub fn router() -> std::io::Result<()> {
     Ok(())
 }
 
-pub fn run() -> std::io::Result<()> {
+pub fn run(current_ip: (u8, u8, u8, u8)) -> std::io::Result<()> {
     let listener = TcpListener::bind("0.0.0.0:7878")?;
     let mut connections: Vec<[u8; 6]> = Vec::new();
 
@@ -70,7 +70,14 @@ pub fn run() -> std::io::Result<()> {
                 if let Some(con) = connections.last() {
                     stream.write_all(con)?;
                 } else {
-                    let default_addr = [0, 0, 0, 0, 0x1E, 0xC7];
+                    let default_addr = [
+                        current_ip.0,
+                        current_ip.1,
+                        current_ip.2,
+                        current_ip.3,
+                        0x1E,
+                        0xC7,
+                    ];
                     stream.write_all(&default_addr)?;
                 }
 
