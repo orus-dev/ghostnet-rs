@@ -24,7 +24,11 @@ impl GhostStream {
     }
 
     pub fn write(&mut self, data: &[u8]) {
-        self.0.write_all(data).unwrap();
+        self.0.write_all(data).unwrap()
+    }
+
+    pub fn read(&mut self, data: &mut [u8]) -> usize {
+        self.0.read(data).unwrap()
     }
 }
 
