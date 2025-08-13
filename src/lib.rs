@@ -3,46 +3,50 @@ use std::{
     net::TcpStream,
 };
 
-pub mod gateway;
+pub mod router;
 
-pub struct GhostStream(TcpStream);
+pub type IpAddr = (u8, u8, u8, u8);
 
-impl GhostStream {
-    pub fn connect(ip: (u8, u8, u8, u8), port: u16) -> std::io::Result<Self> {
-        let addr = get_addr()?;
-        let mut stream = TcpStream::connect(addr)?;
-        let bep = port.to_be_bytes();
-        stream.write_all(&[ip.0, ip.1, ip.2, ip.3, bep[0], bep[1]])?;
+pub struct GhostClient(TcpStream);
 
-        Ok(Self(stream))
-    }
+impl GhostClient {
+    pub fn connect(router: &str, host: IpAddr, port: u16) -> std::io::Result<Self> {
+        let mut stream = TcpStream::connect(router)?;
 
-    pub fn write(&mut self, data: &[u8]) -> std::io::Result<()> {
-        self.0.write_all(data)
-    }
+        let port = port.to_be_bytes();
 
-    pub fn read(&mut self, data: &mut [u8]) -> std::io::Result<usize> {
-        self.0.read(data)
+        stream.write_all(&[host.0, host.1, host.2, host.3, port[0], port[1]])?;
+
+        Ok(GhostClient(stream))
     }
 }
 
-pub fn get_addr() -> std::io::Result<String> {
-    let mut stream = TcpStream::connect("0.0.0.0:7878")?;
+impl GhostClient {
+    pub fn send(&mut self, buf: &[u8]) -> std::io::Result<()> {
+        self.0.write_all(buf)
+    }
 
-    stream.write_all(&[0, 0, 0, 0, 0x1E, 0xC7])?;
+    pub fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        self.0.read(buf)
+    }
 
-    let mut address = [0; 6];
+    pub fn read_bytes(&mut self, size: usize) -> std::io::Result<Vec<u8>> {
+        let mut buf = vec![0u8; size];
+        let n = self.0.read(&mut buf)?;
+        buf.truncate(n);
+        Ok(buf)
+    }
+}
 
-    stream.read(&mut address)?;
-
-    Ok(format!(
+pub fn format_ip_bytes(buf: [u8; 6]) -> String {
+    format!(
         "{}.{}.{}.{}:{}",
-        address[0],
-        address[1],
-        address[2],
-        address[3],
-        u16::from_be_bytes([address[4], address[5]])
-    ))
+        buf[0],
+        buf[1],
+        buf[2],
+        buf[3],
+        u16::from_be_bytes([buf[4], buf[5]])
+    )
 }
 
 pub fn route_tcp(from: &mut TcpStream, to: &mut TcpStream) -> std::io::Result<bool> {
@@ -54,6 +58,19 @@ pub fn route_tcp(from: &mut TcpStream, to: &mut TcpStream) -> std::io::Result<bo
     }
 
     to.write_all(&data[..bytes_read])?;
+
+    Ok(false)
+}
+
+pub fn route_tcp2(from: &mut TcpStream, to: &mut TcpStream) -> std::io::Result<bool> {
+    let mut data = [0; 2048];
+
+    let bytes_read = from.read(&mut data)?;
+    if bytes_read == 0 {
+        return Ok(true);
+    }
+
+    to.write_all(&[&[0u8], &data[..bytes_read]].concat())?;
 
     Ok(false)
 }
