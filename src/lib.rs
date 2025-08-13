@@ -32,7 +32,7 @@ impl GhostClient {
 
     pub fn read_bytes(&mut self, size: usize) -> std::io::Result<Vec<u8>> {
         let mut buf = vec![0u8; size];
-        let n = self.0.read(&mut buf)?;
+        let n = self.read(&mut buf)?;
         buf.truncate(n);
         Ok(buf)
     }
