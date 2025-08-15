@@ -18,7 +18,10 @@ pub fn mask_tls<'a>(
         .with_no_client_auth();
 
     let arc_cfg = Arc::new(config);
-    let conn = ClientConnection::new(arc_cfg, addr.to_owned().try_into()?)?;
-    let tcp = TcpStream::connect(addr.to_owned() + ":443")?;
+    let conn = ClientConnection::new(
+        arc_cfg,
+        addr.split_once(":").unwrap().0.to_string().try_into()?,
+    )?;
+    let tcp = TcpStream::connect(addr)?;
     Ok((conn, tcp))
 }

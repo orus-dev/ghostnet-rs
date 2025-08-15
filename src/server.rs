@@ -6,7 +6,7 @@ use reqwest::Version;
 use reqwest::blocking::Client;
 use reqwest::header::{HeaderMap, HeaderName, HeaderValue};
 
-pub fn run() -> reqwest::Result<()> {
+pub fn run() {
     let listener = TcpListener::bind(format!(
         "0.0.0.0:{}",
         std::env::var("PORT").unwrap_or_else(|_| "3000".into())
@@ -29,12 +29,12 @@ pub fn run() -> reqwest::Result<()> {
                     .1;
                 let http = buf_str.split_once("\n").unwrap().1;
                 stream
-                    .write_all(send_request(addr, http)?.as_bytes())
+                    .write_all(send_request(addr, http).as_bytes())
                     .unwrap();
                 stream.flush().unwrap();
             } else {
                 stream
-                    .write_all(send_request("https://wikipedia.org", "GET / HTTP/1.1")?.as_bytes())
+                    .write_all(send_request("https://wikipedia.org", "GET / HTTP/1.1").as_bytes())
                     .unwrap();
                 stream.flush().unwrap();
             }
@@ -42,7 +42,7 @@ pub fn run() -> reqwest::Result<()> {
     }
 }
 
-fn send_request(url: &str, request: &str) -> reqwest::Result<String> {
+fn send_request(url: &str, request: &str) -> String {
     let client = Client::new();
     let mut lines = request.lines();
 
@@ -61,7 +61,6 @@ fn send_request(url: &str, request: &str) -> reqwest::Result<String> {
                 HeaderName::from_str(key.trim()).unwrap(),
                 HeaderValue::from_str(value.trim()).unwrap(),
             ));
-            // headers.insert(, );
         }
     }
 
@@ -76,7 +75,7 @@ fn send_request(url: &str, request: &str) -> reqwest::Result<String> {
     }
     .headers(HeaderMap::from_iter(headers.into_iter()));
 
-    let resp = builder.send()?;
+    let resp = builder.send().unwrap();
 
     let mut http_string = String::new();
 
@@ -100,8 +99,8 @@ fn send_request(url: &str, request: &str) -> reqwest::Result<String> {
 
     http_string.push_str("\r\n");
 
-    let body = resp.text()?;
+    let body = resp.text().unwrap();
     http_string.push_str(&body);
 
-    Ok(http_string)
+    http_string
 }

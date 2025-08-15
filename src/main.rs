@@ -1,7 +1,14 @@
 fn main() {
-    ghostnet_rs::server::run().unwrap();
+    ghostnet_rs::server::run();
     // println!(
-    //     "Result: {}",
-    //     ghostnet_rs::request("0.0.0.0:3000", "github.com")
+    //     "{}",
+    //     ghostnet_rs::request("ghostnet-rs.onrender.com:443", "https://wikipedia.org")
     // );
+    // println!(
+    //     "{}",
+    //     reqwest::blocking::get("https://ghostnet-rs.onrender.com/")
+    //         .unwrap()
+    //         .text()
+    //         .unwrap()
+    // )
 }
