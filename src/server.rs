@@ -28,11 +28,13 @@ pub fn run() {
                     .unwrap()
                     .1;
                 let http = buf_str.split_once("\n").unwrap().1;
+                println!("Sending request to {addr:?} with http: {http:?}");
                 stream
                     .write_all(send_request(addr, http).as_bytes())
                     .unwrap();
                 stream.flush().unwrap();
             } else {
+                println!("Sending default request");
                 stream
                     .write_all(send_request("https://wikipedia.org", "GET / HTTP/1.1").as_bytes())
                     .unwrap();
