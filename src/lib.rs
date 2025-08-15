@@ -2,6 +2,7 @@ use std::io::{Read, Write};
 
 use rustls::Stream;
 
+pub mod server;
 pub mod tls;
 
 pub fn request(gateway: &str, addr: &str) -> String {

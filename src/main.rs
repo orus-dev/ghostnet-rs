@@ -1,7 +1,7 @@
-use ghostnet_rs::request;
-
 fn main() {
-    let result = request("localhost", "github.com");
-
-    println!("Result: {result}");
+    ghostnet_rs::server::run().unwrap();
+    // println!(
+    //     "Result: {}",
+    //     ghostnet_rs::request("localhost", "github.com")
+    // );
 }
