@@ -1,6 +1,5 @@
 use rustls::ClientConfig;
 use rustls::client::ClientConnection;
-use rustls_native_certs;
 use std::{net::TcpStream, sync::Arc};
 
 pub fn mask_tls<'a>(

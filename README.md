@@ -25,3 +25,9 @@ A router manages the clients and routes messages from one client to another to e
 ## Todo
 - End-To-End Encryption
 - Mask the communications like **HTTPS**
+
+## Common install issues on linux
+```bash
+sudo apt install pkg-config -y
+sudo apt install libssl-dev -y
+```
