@@ -1,108 +1,95 @@
-use std::io::{Read, Write};
-use std::net::TcpListener;
+use hyper::service::{make_service_fn, service_fn};
+use hyper::{Body, Request, Response, Server};
+use reqwest;
+use reqwest::header::{HeaderName, HeaderValue};
+use std::convert::Infallible;
+use std::net::SocketAddr;
 use std::str::FromStr;
+use tokio;
 
-use reqwest::Version;
-use reqwest::blocking::Client;
-use reqwest::header::{HeaderMap, HeaderName, HeaderValue};
+const DEFAULT_TARGET: &str = "https://crackmes.one";
+const GHOST_ROUTE_HEADER: &str = "ghost-route";
 
-pub fn run() {
-    let listener = TcpListener::bind(format!(
-        "0.0.0.0:{}",
-        std::env::var("PORT").unwrap_or_else(|_| "3000".into())
-    ))
-    .unwrap();
+async fn handle_request(req: Request<Body>) -> Result<Response<Body>, Infallible> {
+    let target_url = req
+        .headers()
+        .get(GHOST_ROUTE_HEADER)
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or(DEFAULT_TARGET);
 
-    loop {
-        let (mut stream, _) = listener.accept().unwrap();
+    let url_params = req
+        .uri()
+        .path_and_query()
+        .map(|pq| pq.as_str())
+        .unwrap_or("");
 
-        let mut buf = [0; 1024];
-        if let Ok(len) = stream.read(&mut buf) {
-            let buf_str = String::from_utf8_lossy(&buf[..len]).to_string();
-            if buf_str.starts_with("ROUTE") {
-                let addr = buf_str
-                    .split_once("\n")
-                    .unwrap()
-                    .0
-                    .split_once(" ")
-                    .unwrap()
-                    .1;
-                let http = buf_str.split_once("\n").unwrap().1;
-                println!("Sending request to {addr:?} with http: {http:?}");
-                stream
-                    .write_all(send_request(addr, http).as_bytes())
-                    .unwrap();
-                stream.flush().unwrap();
-            } else {
-                println!("Sending default request");
-                stream
-                    .write_all(send_request("https://wikipedia.org", "GET / HTTP/1.1").as_bytes())
-                    .unwrap();
-                stream.flush().unwrap();
-            }
-        }
-    }
+    let client = reqwest::Client::new();
+
+    let builder = client
+        .request(
+            reqwest::Method::from_str(req.method().as_str()).unwrap(),
+            format!("{}/{}", target_url.trim_end_matches('/'), url_params),
+        )
+        .headers(reqwest::header::HeaderMap::from_iter(
+            req.headers()
+                .into_iter()
+                .map(|h| {
+                    if h.0.as_str() == "host" {
+                        (
+                            HeaderName::from_str("host").unwrap(),
+                            HeaderValue::from_bytes(
+                                reqwest::Url::from_str(target_url)
+                                    .unwrap()
+                                    .host_str()
+                                    .unwrap()
+                                    .as_bytes(),
+                            )
+                            .unwrap(),
+                        )
+                    } else {
+                        (
+                            HeaderName::from_str(h.0.as_str()).unwrap(),
+                            HeaderValue::from_bytes(h.1.as_bytes()).unwrap(),
+                        )
+                    }
+                })
+                .collect::<Vec<_>>(),
+        ));
+
+    let response = builder.send().await.unwrap();
+
+    return Ok(Response::new(Body::from(response.text().await.unwrap())));
 }
 
-fn send_request(url: &str, request: &str) -> String {
-    let client = Client::new();
-    let mut lines = request.lines();
+async fn shutdown_signal() {
+    tokio::signal::ctrl_c()
+        .await
+        .expect("Failed to install CTRL+C signal handler");
+}
 
-    let request_line = lines.next().unwrap();
-    let mut parts = request_line.split_whitespace();
-    let method = parts.next().unwrap_or("GET");
-    // Ignore version for now
+pub async fn run() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    // Server address
+    let addr = SocketAddr::from(([127, 0, 0, 1], 3000));
 
-    let mut headers = Vec::new();
-    for line in lines.clone() {
-        if line.is_empty() {
-            break; // end of headers
-        }
-        if let Some((key, value)) = line.split_once(':') {
-            headers.push((
-                HeaderName::from_str(key.trim()).unwrap(),
-                HeaderValue::from_str(value.trim()).unwrap(),
-            ));
-        }
+    // Create service
+    let make_svc =
+        make_service_fn(|_conn| async { Ok::<_, Infallible>(service_fn(handle_request)) });
+
+    // Create server
+    let server = Server::bind(&addr).serve(make_svc);
+
+    println!("HTTP Proxy Server running on http://{}", addr);
+    println!("Usage:");
+    println!("  - Add 'Ghost-Route: https://target.com' header to route to specific server");
+    println!("  - Without header, routes to default: {}", DEFAULT_TARGET);
+    println!("Press Ctrl+C to stop");
+
+    // Run server with graceful shutdown
+    let graceful = server.with_graceful_shutdown(shutdown_signal());
+
+    if let Err(e) = graceful.await {
+        eprintln!("Server error: {}", e);
     }
 
-    let body: String = lines.collect::<Vec<_>>().join("\n");
-
-    let builder = match method {
-        "GET" => client.get(url),
-        "POST" => client.post(url).body(body.clone()),
-        "PUT" => client.put(url).body(body.clone()),
-        "DELETE" => client.delete(url),
-        _ => client.get(url),
-    }
-    .headers(HeaderMap::from_iter(headers.into_iter()));
-
-    let resp = builder.send().unwrap();
-
-    let mut http_string = String::new();
-
-    http_string.push_str(&format!(
-        "HTTP/{} {} {}\r\n",
-        match resp.version() {
-            Version::HTTP_09 => "0.9",
-            Version::HTTP_10 => "1.0",
-            Version::HTTP_11 => "1.1",
-            Version::HTTP_2 => "2.0",
-            Version::HTTP_3 => "3.0",
-            _ => "2.0",
-        },
-        resp.status().as_u16(),
-        resp.status().canonical_reason().unwrap_or("")
-    ));
-
-    for (key, value) in resp.headers().iter() {
-        http_string.push_str(&format!("{}: {}\r\n", key, value.to_str().unwrap()));
-    }
-
-    http_string.push_str("\r\n");
-
-    let body = resp.text().unwrap();
-    http_string.push_str(&body);
-
-    http_string
+    Ok(())
 }
