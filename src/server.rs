@@ -1,97 +1,63 @@
-use hyper::service::{make_service_fn, service_fn};
-use hyper::{Body, Request, Response, Server};
-use reqwest;
-use reqwest::header::{HeaderName, HeaderValue};
-use std::convert::Infallible;
-use std::net::SocketAddr;
-use std::str::FromStr;
-use tokio;
+use std::{
+    io::{Read, Write},
+    net::{TcpListener, TcpStream},
+};
 
-const DEFAULT_TARGET: &str = "https://crackmes.one";
-const GHOST_ROUTE_HEADER: &str = "ghost-route";
+pub fn run() {
+    let server = TcpListener::bind(format!(
+        "0.0.0.0:{}",
+        std::env::var("PORT").unwrap_or("80".to_string())
+    ))
+    .unwrap();
 
-async fn handle_request(mut req: Request<Body>) -> Result<Response<Body>, Infallible> {
-    let target_url = req
-        .headers()
-        .get(GHOST_ROUTE_HEADER)
-        .and_then(|v| v.to_str().ok())
-        .unwrap_or(DEFAULT_TARGET)
-        .to_string();
+    for stream in server.incoming() {
+        match stream {
+            Ok(mut client) => {
+                println!("Client connected");
+                let mut buf = [0; 1024];
 
-    let url_params = req
-        .uri()
-        .path_and_query()
-        .map(|pq| pq.as_str())
-        .unwrap_or("");
+                let buf_len = client.read(&mut buf).unwrap();
 
-    let client = reqwest::Client::new();
+                let req = String::from_utf8_lossy(&buf[..buf_len]);
+                let req = req.lines().collect::<Vec<_>>();
 
-    let builder = client
-        .request(
-            reqwest::Method::from_str(req.method().as_str()).unwrap(),
-            format!("{}/{}", target_url.trim_end_matches('/'), url_params),
-        )
-        .headers(reqwest::header::HeaderMap::from_iter(
-            req.headers()
-                .into_iter()
-                .map(|h| {
-                    if h.0.as_str() == "host" {
-                        (
-                            HeaderName::from_str("host").unwrap(),
-                            HeaderValue::from_bytes(
-                                reqwest::Url::from_str(&target_url)
-                                    .unwrap()
-                                    .host_str()
-                                    .unwrap()
-                                    .as_bytes(),
-                            )
-                            .unwrap(),
-                        )
-                    } else {
-                        (
-                            HeaderName::from_str(h.0.as_str()).unwrap(),
-                            HeaderValue::from_bytes(h.1.as_bytes()).unwrap(),
-                        )
+                if req[0].starts_with("ROUTE") {
+                    println!("Route mode");
+                    let addr = req[0].split_once(' ').unwrap().1;
+                    println!("Connecting to {addr}");
+                    let mut target = TcpStream::connect(addr).unwrap();
+                    let mut target_t = target.try_clone().unwrap();
+                    let mut client_t = client.try_clone().unwrap();
+                    println!("Connected to {addr}");
+                    client.write_all("CONN EST".as_bytes()).unwrap();
+
+                    std::thread::spawn(move || {
+                        loop {
+                            let mut buf = [0; 2048];
+                            let buf_len = client_t.read(&mut buf).unwrap();
+                            if buf_len == 0 {
+                                target_t.shutdown(std::net::Shutdown::Both).unwrap();
+                                break;
+                            }
+                            println!("Client -> Target {:?}", &buf[..buf_len]);
+                            target_t.write_all(&buf[..buf_len]).unwrap();
+                        }
+                    });
+
+                    loop {
+                        let mut buf = [0; 2048];
+                        let buf_len = target.read(&mut buf).unwrap();
+                        if buf_len == 0 {
+                            client.shutdown(std::net::Shutdown::Both).unwrap();
+                            break;
+                        }
+                        println!("Target -> Client {:?}", &buf[..buf_len]);
+                        client.write_all(&buf[..buf_len]).unwrap();
                     }
-                })
-                .collect::<Vec<_>>(),
-        ))
-        .body(hyper::body::to_bytes(req.body_mut()).await.unwrap());
+                }
+            }
 
-    let response = builder.send().await.unwrap();
-
-    return Ok(Response::new(Body::from(response.text().await.unwrap())));
-}
-
-async fn shutdown_signal() {
-    tokio::signal::ctrl_c()
-        .await
-        .expect("Failed to install CTRL+C signal handler");
-}
-
-pub async fn run() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    // Server address
-    let addr = SocketAddr::from(([127, 0, 0, 1], 3000));
-
-    // Create service
-    let make_svc =
-        make_service_fn(|_conn| async { Ok::<_, Infallible>(service_fn(handle_request)) });
-
-    // Create server
-    let server = Server::bind(&addr).serve(make_svc);
-
-    println!("HTTP Proxy Server running on http://{}", addr);
-    println!("Usage:");
-    println!("  - Add 'Ghost-Route: https://target.com' header to route to specific server");
-    println!("  - Without header, routes to default: {}", DEFAULT_TARGET);
-    println!("Press Ctrl+C to stop");
-
-    // Run server with graceful shutdown
-    let graceful = server.with_graceful_shutdown(shutdown_signal());
-
-    if let Err(e) = graceful.await {
-        eprintln!("Server error: {}", e);
+            Err(_) => {}
+        }
     }
-
-    Ok(())
 }

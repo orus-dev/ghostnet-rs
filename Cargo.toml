@@ -9,9 +9,4 @@ name = "ghostnet-rs"
 [dependencies]
 rustls = "0.23.31"
 rustls-native-certs = "0.8.1"
-
-reqwest = { version = "0.12.23", features = ["blocking"] }
-
-hyper = { version = "0.14", features = ["full"] }
-tokio = { version = "1", features = ["full"] }
 webpki-roots = "1.0.2"

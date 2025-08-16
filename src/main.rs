@@ -1,6 +1,8 @@
 use ghostnet_rs::Request;
 
 fn main() {
-    let req = Request::new("example.com");
-    println!("{}", req.send());
+    ghostnet_rs::server::run();
+    // println!("{}", Request::new("example.com").send_routed_secure("localhost"));
+    // println!("{}", Request::new("example.com").send_routed("localhost"));
+    // println!("{}", Request::new("example.com").send());
 }
