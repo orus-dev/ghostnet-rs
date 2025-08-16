@@ -10,12 +10,13 @@ use tokio;
 const DEFAULT_TARGET: &str = "https://crackmes.one";
 const GHOST_ROUTE_HEADER: &str = "ghost-route";
 
-async fn handle_request(req: Request<Body>) -> Result<Response<Body>, Infallible> {
+async fn handle_request(mut req: Request<Body>) -> Result<Response<Body>, Infallible> {
     let target_url = req
         .headers()
         .get(GHOST_ROUTE_HEADER)
         .and_then(|v| v.to_str().ok())
-        .unwrap_or(DEFAULT_TARGET);
+        .unwrap_or(DEFAULT_TARGET)
+        .to_string();
 
     let url_params = req
         .uri()
@@ -38,7 +39,7 @@ async fn handle_request(req: Request<Body>) -> Result<Response<Body>, Infallible
                         (
                             HeaderName::from_str("host").unwrap(),
                             HeaderValue::from_bytes(
-                                reqwest::Url::from_str(target_url)
+                                reqwest::Url::from_str(&target_url)
                                     .unwrap()
                                     .host_str()
                                     .unwrap()
@@ -54,7 +55,8 @@ async fn handle_request(req: Request<Body>) -> Result<Response<Body>, Infallible
                     }
                 })
                 .collect::<Vec<_>>(),
-        ));
+        ))
+        .body(hyper::body::to_bytes(req.body_mut()).await.unwrap());
 
     let response = builder.send().await.unwrap();
 

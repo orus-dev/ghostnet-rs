@@ -1,8 +1,6 @@
-#[tokio::main]
-async fn main() {
-    ghostnet_rs::server::run().await.unwrap();
-    // println!(
-    // "{}",
-    // ghostnet_rs::request("ghostnet-rs.onrender.com:443", "https://wikipedia.org")
-    // );
+use ghostnet_rs::Request;
+
+fn main() {
+    let req = Request::new("example.com");
+    println!("{}", req.send());
 }
